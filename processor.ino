@@ -262,11 +262,11 @@ String processor(const String& var) {
       return getValue(arqAngulos, ';', i);
     }
   }
-  if (var == "PIVOT_ID") {
-    return String(PIVOT_ID);
+  if (var == "GPRS_ID") {
+    return String(GPRS_ID);
   }
   if (var == "NODE_ID") {
-    return String(NODE_ID);
+    //return String(NODE_ID);
   }
 
   return String();

@@ -11,11 +11,6 @@
 #include "AsyncJson.h"
 #include "ArduinoJson.h"
 #include <Wire.h>
-//#include "Adafruit_MCP23017.h"
-
-
-
-//ATUAÇÃO
 
 
 #define LIGA              3
@@ -37,6 +32,7 @@
 #define PRESS             39
 #define PERC              38
 
+
 //LoRA SPI
 
 #define SCK 5
@@ -53,6 +49,8 @@
 void taskDES( void *pvParameters ); //DEFINE TASK
 
 //hw_timer_t *timer = NULL;
+
+//String TIMERTC;
 
 String LoRaData;
 String JSONhora;
@@ -83,12 +81,11 @@ int percA2[10];
 int PROGMEM contag;
 int PROGMEM contpos;
 String responseHist;
-String PIVOT_ID;
-String NODE_ID;
+String GPRS_ID;
 
 const char* ssid = "Soil";
 const char* password = "soil2021";
-const char* ssidap = "Painel Soil";
+const char* ssidap = "Painel Soil-Irrigabras";
 const char* passwordap = "soil2021";
 
 // INPUTS PAGINA WEB
@@ -111,7 +108,7 @@ const char* PARAM_NOME = "inputNome";
 const char* PARAM_SW = "inputSW";
 const char* PARAM_DelayPressao = "inputDelaypressao";
 const char* PARAM_PERC_H = "percentimetroAH";
-const char* PARAM_PIVOT_ID = "inputPivotID";
+const char* PARAM_GPRS_ID = "inputPivotID";//**web
 const char* PARAM_NODE_ID = "inputNodeID";
 String inputMessage = "100";
 
@@ -394,11 +391,18 @@ void TaskDES( void *pvParameters) {
 
 void setup()
 {
+
+  //Wire.begin(32, 22);// sda // scl
+  //rtc.begin();
+  //rtc.adjust(DateTime(2022, 2, 25, 14, 50, 00));//Ajusta o tempo do RTC para a data e hora
+
   time_on = millis();
   Serial2.begin(9600);   //INICIALIZA Serial2., PARA ESP32 LORAV2 NUNCA UTILIZAR A SERIAL1
-  Serial1.begin(115200, SERIAL_8N1, 21, 13);
+  //ss.begin(115200);
+  //ss.println("INICIOU SOFTWARE SERIAL");
+  Serial1.begin(115200, SERIAL_8N1, 21, 13); // rx // tx
   //begin();
-  // Serial2.begin(9600);
+  //Serial2.begin(9600);
   //configureWatchdog();
 
   pinMode(LIGA, OUTPUT);
@@ -514,8 +518,8 @@ void setup()
   }
   arqNomes = readFile(SPIFFS, "/setores.bin");
   arqAngulos = readFile(SPIFFS, "/angulos.bin");
-  PIVOT_ID = readFile(SPIFFS, "/pivot_ID.txt");
-  NODE_ID = readFile(SPIFFS, "/node_ID.txt");
+  GPRS_ID = readFile(SPIFFS, "/gprs_ID.txt");
+ 
   //caso não haja nada na memoria será setado o defaut (NA;4s;Pivo 1;sw:0x99)
   if (error == 1) {
     TIPO = "NA";
@@ -534,10 +538,10 @@ void setup()
     writeFile(SPIFFS, "/modoeco.bin", eco.c_str());
     arqNomes = "S1_inicio;S1_fim;S2_inicio;S2_fim;S3_inicio;S3_fim;S4_inicio;S4_fim";
     arqAngulos = "30;60;120;150;210;240;300;330";
-    NODE_ID = "0";
-    PIVOT_ID = "TESTE_0_0";
-    writeFile(SPIFFS, "/node_ID.txt", NODE_ID.c_str());
-    writeFile(SPIFFS, "/pivot_ID.txt", PIVOT_ID.c_str());
+  
+    GPRS_ID = "PIVO_NAO_CADASTRADO";
+    
+    writeFile(SPIFFS, "/gprs_ID.txt", GPRS_ID.c_str());
   }
 
   for (int i = 0; i < arqNomes.length(); i++) {
@@ -713,22 +717,22 @@ void setup()
       writeFile(SPIFFS, "/delay_p.txt", String(DelayPressao / 60000).c_str());
 
     }
-    if (request->hasParam(PARAM_PIVOT_ID)) {
-      PIVOT_ID = request->getParam(PARAM_PIVOT_ID)->value();
-      writeFile(SPIFFS, "/pivot_ID.txt", PIVOT_ID.c_str());
+    if (request->hasParam(PARAM_GPRS_ID)) {
+      GPRS_ID = request->getParam(PARAM_GPRS_ID)->value();
+      writeFile(SPIFFS, "/gprs_ID.txt", GPRS_ID.c_str());
       StaticJsonDocument<100> reg;
       reg["register"] = "True";
-      reg["PIVOT_ID"]   = PIVOT_ID;
-      reg["NODE_ID"]   = NODE_ID;
+      reg["GPRS_ID"]   = GPRS_ID;
+     
       serializeJson(reg, Serial1);
     }
     if (request->hasParam(PARAM_NODE_ID)) {
-      NODE_ID = request->getParam(PARAM_NODE_ID)->value();
-      writeFile(SPIFFS, "/node_ID.txt", NODE_ID.c_str());
+      //NODE_ID = request->getParam(PARAM_NODE_ID)->value();
+      //writeFile(SPIFFS, "/node_ID.txt", NODE_ID.c_str());
       StaticJsonDocument<100> reg;
       reg["register"] = "True";
-      reg["PIVOT_ID"]   = PIVOT_ID;
-      reg["NODE_ID"]   = NODE_ID;
+      reg["GPRS_ID"]   = GPRS_ID;
+      //reg["NODE_ID"]   = NODE_ID;
       serializeJson(reg, Serial1);
     }
     //-----------------------------------------------------------------------------------------------------------------------
@@ -1190,40 +1194,46 @@ void showAvailableSpace()
 void loop()
 {
 
+
   if (Serial1.available()) {
     String mqttmsg = Serial1.readString();
+    //Serial1.print("Serial1 - 0");
+    //Serial1.print(mqttmsg);
     StaticJsonDocument<200> GPRS;
     deserializeJson(GPRS, mqttmsg);
-    if (GPRS["register"] == "True") {
+    if (GPRS["register"] == "True") { //Se enviar register: true, registra um novo GPRS_ID
       StaticJsonDocument<100> reg;
       reg["register"] = "True";
-      reg["PIVOT_ID"]   = PIVOT_ID;
-      reg["NODE_ID"]   = NODE_ID;
+      reg["GPRS_ID"]   = GPRS_ID;
       serializeJson(reg, Serial1);
-    }else{
-    String payload = GPRS["payload"];
-    for (int i = 0; i < payload.length(); i++) {
-      stats[i] = payload[i];
-    }
-    stats[payload.length()] = '#';
-    //Serial2.println(stats);
-    tempo = GPRS["timestamp"];
-    //Serial2.println(tempo);
-    mqttFlag = 1;
+    } else {  // Caso contrário, extrai os numeros do payload
+      String payload = GPRS["payload"];
+      for (int i = 0; i < payload.length(); i++) {
+        stats[i] = payload[i];
+      }
+      stats[payload.length()] = '#';
+      //Serial2.println(stats);
+      tempo = GPRS["timestamp"];
+      //Serial2.println(tempo);
+      mqttFlag = 1;
     }
   }
-//  if (((millis() - time_on) > DelayReliga) && auxRA == 0) {
-//    String RA = readFile(SPIFFS, "/estadoanteriorAUTO.bin");
-//    stats[0] = RA[0];
-//    stats[1] = RA[2];
-//    stats[2] = RA[4];
-//    numw = RA.substring(6, RA.indexOf('\n')).toInt();
-//    EnviaEstado();
-//    auxRA = 1;
-//  }
 
+  //------------------------------------ Religamento Automático ----------------------------------------
+  
+    if (((millis() - time_on) > DelayReliga) && auxRA == 0)
+    {
+      String RA = readFile(SPIFFS, "/estadoanteriorAUTO.bin");
+      stats[0] = RA[0];
+      stats[1] = RA[2];
+      stats[2] = RA[4];
+      numw = RA.substring(6, RA.indexOf('\n')).toInt();
+      EnviaEstado();
+      auxRA = 1;
+    }
+  //--------------------------------------------------------------------------------------------------------
 
-  int iniTS = inicioH * 3600 + inicioM * 60;
+int iniTS = inicioH * 3600 + inicioM * 60;
   int fimTS = fimH * 3600 + fimM * 60;
   //int horaTS = horaH.toInt() * 3600 + horaM.toInt() * 60 + horaS.toInt();
 
@@ -1406,6 +1416,7 @@ void loop()
   }
   //----------------------------------------------------------------------------------------------
   if ( Serial2.available() > 0 || webflag == 1 || mqttFlag == 1) { //se o Serial2.receber uma mensagem de 6 caracteres ou receber uma msg do WebServer
+    
     int buffersize =  Serial2.available();
     //Serial2.println("COASda");
 
@@ -1414,7 +1425,10 @@ void loop()
     if (mqttFlag != 1) {
       for (int i = 0; i < 50; i++) {
         if ( Serial2.available()) {
+        //Serial.print("Serial2 - 0");
+          
           stats[i] =  Serial2.read();
+          //Serial1.print(stats[i]);
         } else {
           stats[i] = '#';
           i = 51;
@@ -1476,7 +1490,7 @@ void loop()
         EnviaStatus();
       }
 
-      if (stats[0] == 'G' && stats[1] == 'P' && stats[2] == 'S') {
+      if ((stats[0] == 'G' && stats[1] == 'P' && stats[2] == 'S') || (stats[1] == 'G' && stats[2] == 'P' && stats[3] == 'S') || (stats[2] == 'G' && stats[3] == 'P' && stats[4] == 'S')) {
         String GPSdata = String(stats).substring(String(stats).indexOf('S') + 1, String(stats).indexOf('$'));
         //Serial2.print(GPSdata);
         int separa = GPSdata.indexOf('-');
@@ -1577,20 +1591,20 @@ void loop()
         Serial2.println("Delete ag OK");
         //id = 0;
         return;
-      }
-      /*  Lista de comandos:
-           SF: exibe a lista inteira
-           RN(numero): exibe a partir de um registro especifico
-           LST: exibe o ultimo registro
-           DEL: deleta a lista inteira
-           ADEL: deleta os agendamentos
-           STR: Salva a lista inteira em uma string "dados"
-           RST: Reset via serial
-           SA: exibe agendamentos por horario
-           SP: exibe agendamentos por posição
-
-           NENHUM COMANDO PODE TER 6 CARACTERES
-      */
+        }
+                         /*  Lista de comandos que podem serem enviados via Rádios
+                               SF: exibe a lista inteira
+                               RN(numero): exibe a partir de um registro especifico
+                               LST: exibe o ultimo registro
+                               DEL: deleta a lista inteira
+                               ADEL: deleta os agendamentos
+                               STR: Salva a lista inteira em uma string "dados"
+                               RST: Reset via serial
+                               SA: exibe agendamentos por horario
+                               SP: exibe agendamentos por posição
+  
+                               NENHUM COMANDO PODE TER 6 CARACTERES
+                          */
     }
 
     mqttFlag = 0;
@@ -1691,6 +1705,19 @@ void loop()
   AtuaAg();
   AtuaPOS();
   LigaBomba();
+  
+//
+//  static uint8_t tempoPass = 10;
+//  if(tempoPass > 0)
+//  {
+//    tempoPass--;
+//  }
+//  else
+//  {
+//    digitalWrite(BOMBA,!digitalRead(BOMBA));
+//    tempoPass = 10;
+//  }
+  
 
 }
 

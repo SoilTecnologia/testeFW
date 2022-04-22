@@ -15,9 +15,9 @@ void EnviaStatus() {
 
   StaticJsonDocument<500> saida;
   saida["type"] = "status";
-  saida["farm_id"] = NODE_ID;
-  saida["node_name"] = PIVOT_ID;
-  saida["payload"] = String( String(EstadoAtual[0]) + "-" + String(EstadoAtual[1]) + "-" + String(EstadoAtual[2]) + "-" + String(perc) + "-" + String(anguloint) + "-" + String(tempo));
+  saida["id"] = GPRS_ID;
+  //saida["node_name"] = PIVOT_ID;
+  saida["payload"] = String( String(EstadoAtual[0]) + String(EstadoAtual[1]) + String(EstadoAtual[2]) + "-" + String(perc) + "-" + String(anguloint) + "-" + String(tempo));
 //  saida["on_off"] = String(EstadoAtual[2]);
 //  saida["front_back"] = String(EstadoAtual[0]);
 //  saida["water"] = String(EstadoAtual[1]);
